@@ -1,0 +1,21 @@
+{
+  "name": "Cafe Staff Handy",
+  "short_name": "Handy",
+  "description": "カフェの注文管理ハンディアプリ",
+  "start_url": "/staff",
+  "display": "standalone",
+  "background_color": "#fdfcfb",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
