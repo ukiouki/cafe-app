@@ -25,6 +25,9 @@ export default function Kitchen() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [now, setNow] = useState(new Date());
   const [activeTab, setActiveTab] = useState<"preparing" | "completed">("preparing");
+  // --- ここから追加：タップした項目を記憶する ---
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  // --- ここまで追加 ---
   const prevOrderCount = useRef(0);
 
   useEffect(() => {
@@ -79,16 +82,28 @@ export default function Kitchen() {
               <span className="text-xl font-black">⏱ {order.createdAt ? Math.floor((now.getTime() - order.createdAt.toMillis()) / 60000) : 0}分</span>
             </div>
             <div className="p-2 space-y-3">
-              {order.items.map((item, idx) => (
-                <div key={idx} className="bg-white/70 p-3 rounded-lg text-left shadow-sm">
-                  <div className="flex justify-between font-black"><span>{item.name}</span><span>×{item.quantity}</span></div>
-                  <div className="mt-1 space-y-1">
-                    {item.options?.spicy && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded font-bold italic block w-fit">🌶 {item.options.spicy}</span>}
-                    {item.options?.selectedToppings && item.options.selectedToppings.length > 0 && <div className="text-blue-700 text-xs font-black italic">+ {item.options.selectedToppings.map((t: any) => t.name || t).join(", ")}</div>}
-                    {item.options?.memo && <div className="bg-orange-100 text-orange-800 p-2 rounded text-sm font-bold border-l-4 border-orange-500">🚩 {item.options.memo}</div>}
+              {order.items.map((item, idx) => {
+                // --- ここから追加：一意のキーを作成 ---
+                const itemKey = `${order.id}-${idx}`;
+                const isChecked = checkedItems[itemKey];
+                // --- ここまで追加 ---
+                return (
+                  <div 
+                    key={idx} 
+                    // --- 修正：クリックイベントを追加 ---
+                    onClick={() => setCheckedItems(prev => ({ ...prev, [itemKey]: !prev[itemKey] }))}
+                    // --- 修正：isCheckedがtrueなら背景をピンク(bg-pink-200)にする ---
+                    className={`p-3 rounded-lg text-left shadow-sm cursor-pointer transition-colors ${isChecked ? "bg-pink-200" : "bg-white/70"}`}
+                  >
+                    <div className="flex justify-between font-black"><span>{item.name}</span><span>×{item.quantity}</span></div>
+                    <div className="mt-1 space-y-1">
+                      {item.options?.spicy && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded font-bold italic block w-fit">🌶 {item.options.spicy}</span>}
+                      {item.options?.selectedToppings && item.options.selectedToppings.length > 0 && <div className="text-blue-700 text-xs font-black italic">+ {item.options.selectedToppings.map((t: any) => t.name || t).join(", ")}</div>}
+                      {item.options?.memo && <div className="bg-orange-100 text-orange-800 p-2 rounded text-sm font-bold border-l-4 border-orange-500">🚩 {item.options.memo}</div>}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="p-2">
               <button onClick={() => markAsCompleted(order.id)} className="w-full bg-blue-600 text-white font-black py-4 rounded-lg text-xl shadow-lg">提供済み</button>
