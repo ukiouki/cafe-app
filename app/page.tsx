@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react"; // Suspenseを追加
 import { collection, onSnapshot, addDoc, serverTimestamp, doc } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { useSearchParams } from "next/navigation"; // 追加
 
 type Topping = { name: string; price: number };
 
@@ -39,7 +40,14 @@ type CartItem = {
   };
 };
 
-export default function Home() {
+type Category = { id: string; name: string };
+
+// --- メインのロジックを分離（useSearchParamsを使うため） ---
+function OrderPageContent() {
+  const searchParams = useSearchParams();
+  // URLの ?table=◯ を取得。無ければデフォルトで 1
+  const tableNum = Number(searchParams.get("table")) || 1;
+
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -50,8 +58,8 @@ export default function Home() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [tableNames, setTableNames] = useState<{ [key: number]: string }>({});
   
-  const categories = ["アペタイザー", "ハンバーガー", "ドリンク"];
-  const [activeCategory, setActiveCategory] = useState("アペタイザー");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeCategory, setActiveCategory] = useState("");
 
   const [optionPopupItem, setOptionPopupItem] = useState<MenuItem | null>(null);
   const [selectedSpicy, setSelectedSpicy] = useState("無し");
@@ -71,17 +79,29 @@ export default function Home() {
       setLoading(false);
     });
 
+    const unsubCats = onSnapshot(collection(db, "categories"), (snapshot) => {
+      const cats = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })) as Category[];
+      setCategories(cats);
+      if (cats.length > 0) {
+        setActiveCategory(prev => {
+          if (!prev || !cats.some(c => c.name === prev)) return cats[0].name;
+          return prev;
+        });
+      }
+    });
+
     onSnapshot(doc(db, "settings", "tables"), (docSnap) => {
       if (docSnap.exists()) setTableNames(docSnap.data().names || {});
     });
 
     const unsubOrders = onSnapshot(collection(db, "orders"), (snapshot) => {
       const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Order[];
-      setAllOrders(orders.filter(o => o.tableNumber === 1 && o.status !== "checked_out"));
+      // 修正：URLから取得した tableNum でフィルタリング
+      setAllOrders(orders.filter(o => o.tableNumber === tableNum && o.status !== "checked_out"));
     });
 
-    return () => { unsubMenu(); unsubOrders(); };
-  }, []);
+    return () => { unsubMenu(); unsubCats(); unsubOrders(); };
+  }, [tableNum]); // tableNumが変わったら再取得
 
   const historyTotal = allOrders.reduce((sum, o) => sum + (o.totalPrice || 0), 0);
 
@@ -130,8 +150,9 @@ export default function Home() {
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, "orders"), {
-        tableNumber: 1,
-        tableName: tableNames[1] || "TABLE 1",
+        // 修正：URLから取得した tableNum を使用
+        tableNumber: tableNum,
+        tableName: tableNames[tableNum] || `TABLE ${tableNum}`,
         items: cart,
         totalPrice: cart.reduce((s, i) => s + i.totalPrice, 0),
         status: "preparing",
@@ -166,7 +187,8 @@ export default function Home() {
               注文履歴
             </button>
             <div className="bg-[#1a1a1a] text-white px-5 py-2 rounded-2xl text-xs font-black shadow-xl shadow-zinc-200">
-              {tableNames[1] || "TABLE 1"}
+              {/* 修正：URLの番号を表示 */}
+              {tableNames[tableNum] || `TABLE ${tableNum}`}
             </div>
           </div>
         </div>
@@ -174,13 +196,13 @@ export default function Home() {
         <div className="flex px-4 overflow-x-auto no-scrollbar gap-2 pb-4">
           {categories.map((cat) => (
             <button 
-              key={cat} 
-              onClick={() => { haptic(); setActiveCategory(cat); }} 
+              key={cat.id} 
+              onClick={() => { haptic(); setActiveCategory(cat.name); }} 
               className={`px-7 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap tracking-wider ${
-                activeCategory === cat ? "bg-[#1a1a1a] text-white shadow-lg" : "bg-white text-zinc-500 border border-zinc-100"
+                activeCategory === cat.name ? "bg-[#1a1a1a] text-white shadow-lg" : "bg-white text-zinc-500 border border-zinc-100"
               }`}
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
         </div>
@@ -380,5 +402,14 @@ export default function Home() {
         </div>
       )}
     </div>
+  );
+}
+
+// --- 最終的にエクスポートするコンポーネント ---
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center font-bold text-zinc-300 tracking-widest">LOADING...</div>}>
+      <OrderPageContent />
+    </Suspense>
   );
 }

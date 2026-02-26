@@ -39,6 +39,9 @@ type CartItem = {
   };
 };
 
+// --- 追加：カテゴリーの型 ---
+type Category = { id: string; name: string };
+
 export default function StaffOrder() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [tableNames, setTableNames] = useState<{ [key: string]: string }>({});
@@ -49,7 +52,10 @@ export default function StaffOrder() {
   const [guestCount, setGuestCount] = useState<string>(""); // 人数
   const [step, setStep] = useState<"table" | "menu">("table"); // ページ分け用
   
-  const [activeCategory, setActiveCategory] = useState("アペタイザー");
+  // --- 修正：カテゴリーを動的に取得するための状態 ---
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeCategory, setActiveCategory] = useState(""); 
+  
   const [optionPopupItem, setOptionPopupItem] = useState<MenuItem | null>(null);
   
   const [selectedSpicy, setSelectedSpicy] = useState("無し");
@@ -69,6 +75,19 @@ export default function StaffOrder() {
   useEffect(() => {
     onSnapshot(collection(db, "menus"), (snapshot) => {
       setMenus(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as MenuItem[]);
+    });
+
+    // --- 追加：カテゴリーをFirestoreから取得 ---
+    onSnapshot(collection(db, "categories"), (snapshot) => {
+      const cats = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })) as Category[];
+      setCategories(cats);
+      // 最初の一度だけ、もしくは現在のカテゴリが消えた場合に初期値をセット
+      if (cats.length > 0) {
+        setActiveCategory(prev => {
+          if (!prev || !cats.some(c => c.name === prev)) return cats[0].name;
+          return prev;
+        });
+      }
     });
 
     onSnapshot(doc(db, "settings", "tables"), (docSnap) => {
@@ -265,15 +284,16 @@ export default function StaffOrder() {
           <button onClick={() => { haptic(); setIsBillOpen(true); }} className="text-xs font-black text-orange-400 bg-orange-950/50 px-4 py-2 rounded-full border border-orange-900/50">履歴</button>
         </div>
         <div className="flex p-1.5 bg-zinc-800/80 backdrop-blur-md overflow-x-auto no-scrollbar border-t border-white/10">
-          {["アペタイザー", "ハンバーガー", "ドリンク"].map((cat) => (
+          {/* 修正：Firestoreから取得したカテゴリーをループさせる */}
+          {categories.map((cat) => (
             <button
-              key={cat}
-              onClick={() => { haptic(); setActiveCategory(cat); }}
+              key={cat.id}
+              onClick={() => { haptic(); setActiveCategory(cat.name); }}
               className={`flex-1 py-3.5 px-6 text-xs font-black tracking-wider transition-all rounded-lg whitespace-nowrap ${
-                activeCategory === cat ? "bg-white text-black shadow-lg" : "text-zinc-300"
+                activeCategory === cat.name ? "bg-white text-black shadow-lg" : "text-zinc-300"
               }`}
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
         </div>
@@ -299,7 +319,7 @@ export default function StaffOrder() {
         </section>
       </main>
 
-      {/* BILL MODAL (履歴・会計) */}
+      {/* --- 以降、モーダルやフッターのロジックは一切変更なし --- */}
       {isBillOpen && tableNum && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-6 text-left">
           <div className="bg-[#fdfcfb] w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl border border-white animate-in zoom-in-95 duration-200">
@@ -334,7 +354,6 @@ export default function StaffOrder() {
         </div>
       )}
 
-      {/* FOOTER CART */}
       <div className="fixed bottom-0 w-full p-6 bg-white/90 backdrop-blur-2xl border-t-2 border-zinc-200 z-20 shadow-[0_-15px_50px_rgba(0,0,0,0.08)]">
         <div className="max-w-md mx-auto space-y-5 text-left">
           <div className="flex justify-between items-center px-1">
@@ -363,7 +382,6 @@ export default function StaffOrder() {
         </div>
       </div>
 
-      {/* OPTIONS MODAL (数量±ボタン付き) */}
       {optionPopupItem && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-end text-left">
           <div className="bg-[#fdfcfb] w-full rounded-t-[3.5rem] p-10 shadow-2xl max-h-[85vh] overflow-y-auto border-t-2 border-white animate-in slide-in-from-bottom duration-300">
@@ -377,23 +395,15 @@ export default function StaffOrder() {
               </div>
 
               <div className="space-y-10 pb-12">
-                {/* 数量±ボタンセクション */}
                 <div className="bg-zinc-50 p-6 rounded-[2rem] border-2 border-zinc-100 flex justify-between items-center">
                   <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">数量選択</p>
                   <div className="flex items-center gap-6">
-                    <button 
-                      onClick={() => { haptic(); setSelectedQuantity(Math.max(1, selectedQuantity - 1)); }}
-                      className="w-12 h-12 rounded-full bg-white border-2 border-zinc-200 text-2xl font-black active:scale-90"
-                    >-</button>
+                    <button onClick={() => { haptic(); setSelectedQuantity(Math.max(1, selectedQuantity - 1)); }} className="w-12 h-12 rounded-full bg-white border-2 border-zinc-200 text-2xl font-black active:scale-90">-</button>
                     <span className="text-2xl font-black w-8 text-center">{selectedQuantity}</span>
-                    <button 
-                      onClick={() => { haptic(); setSelectedQuantity(selectedQuantity + 1); }}
-                      className="w-12 h-12 rounded-full bg-white border-2 border-zinc-200 text-2xl font-black active:scale-90"
-                    >+</button>
+                    <button onClick={() => { haptic(); setSelectedQuantity(selectedQuantity + 1); }} className="w-12 h-12 rounded-full bg-white border-2 border-zinc-200 text-2xl font-black active:scale-90">+</button>
                   </div>
                 </div>
 
-                {/* オプション（辛さ・パクチー・トッピング） */}
                 {optionPopupItem.hasSpicyOption && (
                   <div className="space-y-4">
                     <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">🌶 辛さ</p>
@@ -404,7 +414,6 @@ export default function StaffOrder() {
                     </div>
                   </div>
                 )}
-                {/* ... 他のオプションも同様 ... */}
                 {optionPopupItem.toppings && optionPopupItem.toppings.length > 0 && (
                   <div className="space-y-4">
                     <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">トッピング</p>
@@ -418,12 +427,8 @@ export default function StaffOrder() {
                     </div>
                   </div>
                 )}
-
                 <textarea value={userMemo} onChange={e => setUserMemo(e.target.value)} placeholder="備考メモ..." className="w-full bg-zinc-50 border-2 border-zinc-100 rounded-[2rem] p-6 text-[15px] font-bold h-24 outline-none" />
-                
-                <button onClick={addToCart} className="w-full bg-[#1a1a1a] text-white py-6 rounded-[2.5rem] font-black text-lg shadow-xl active:scale-95">
-                  カートに追加 (¥{( (optionPopupItem.price + selectedToppings.reduce((s,t)=>s+t.price,0)) * selectedQuantity).toLocaleString()})
-                </button>
+                <button onClick={addToCart} className="w-full bg-[#1a1a1a] text-white py-6 rounded-[2.5rem] font-black text-lg shadow-xl active:scale-95">カートに追加 (¥{( (optionPopupItem.price + selectedToppings.reduce((s,t)=>s+t.price,0)) * selectedQuantity).toLocaleString()})</button>
               </div>
             </div>
           </div>
